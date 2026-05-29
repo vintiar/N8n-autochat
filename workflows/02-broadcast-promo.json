@@ -1,0 +1,190 @@
+{
+  "name": "02 - Restoran Sasak Lombok - Broadcast Promo",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c1111111-1111-1111-1111-111111111111",
+      "name": "Jalankan Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Broadcasts", "mode": "name" },
+        "filtersUI": {
+          "values": [{ "lookupColumn": "status", "lookupValue": "pending" }]
+        },
+        "options": { "returnAllMatches": true }
+      },
+      "id": "c2222222-2222-2222-2222-222222222222",
+      "name": "Ambil Pesan Promo",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [440, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [{
+            "id": "cond-has-promo",
+            "leftValue": "={{ $items().length }}",
+            "rightValue": 0,
+            "operator": { "type": "number", "operation": "gt" }
+          }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c3333333-3333-3333-3333-333333333333",
+      "name": "Ada Promo Pending?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Sessions", "mode": "name" },
+        "options": { "returnAllMatches": true }
+      },
+      "id": "c4444444-4444-4444-4444-444444444444",
+      "name": "Ambil Semua Pelanggan",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [880, 220],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const promoItems = $('Ambil Pesan Promo').all();\nconst customerItems = $('Ambil Semua Pelanggan').all();\n\nif (promoItems.length === 0) return [];\n\nconst promo = promoItems[0].json;\nconst promoMsg = promo.message || '';\nconst promoId = promo.broadcast_id || promo.row_number || '1';\n\n// Deduplikasi nomor telepon\nconst uniquePhones = new Set();\nconst targets = [];\n\ncustomerItems.forEach(item => {\n  const phone = item.json.phone;\n  if (phone && !uniquePhones.has(phone)) {\n    uniquePhones.add(phone);\n    targets.push({ json: { phone, promoMsg, promoId } });\n  }\n});\n\nreturn targets;"
+      },
+      "id": "c5555555-5555-5555-5555-555555555555",
+      "name": "Siapkan Daftar Penerima",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 220]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "c6666666-6666-6666-6666-666666666666",
+      "name": "Satu per Satu",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1320, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }] },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\"number\": \"{{ $json.phone }}\", \"text\": \"{{ $json.promoMsg }}\"}",
+        "options": { "timeout": 8000 }
+      },
+      "id": "c7777777-7777-7777-7777-777777777777",
+      "name": "Kirim Promo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 220]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "c8888888-8888-8888-8888-888888888888",
+      "name": "Jeda 2 Detik",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1760, 220]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Broadcasts", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "broadcast_id": "={{ $('Siapkan Daftar Penerima').first().json.promoId }}",
+            "status": "sent",
+            "sent_at": "={{ new Date().toISOString() }}",
+            "recipients": "={{ $('Siapkan Daftar Penerima').all().length }}"
+          },
+          "matchingColumns": ["broadcast_id"],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "c9999999-9999-9999-9999-999999999999",
+      "name": "Tandai Promo Terkirim",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1980, 220],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Jalankan Manual": {
+      "main": [[{ "node": "Ambil Pesan Promo", "type": "main", "index": 0 }]]
+    },
+    "Ambil Pesan Promo": {
+      "main": [[{ "node": "Ada Promo Pending?", "type": "main", "index": 0 }]]
+    },
+    "Ada Promo Pending?": {
+      "main": [
+        [{ "node": "Ambil Semua Pelanggan", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Ambil Semua Pelanggan": {
+      "main": [[{ "node": "Siapkan Daftar Penerima", "type": "main", "index": 0 }]]
+    },
+    "Siapkan Daftar Penerima": {
+      "main": [[{ "node": "Satu per Satu", "type": "main", "index": 0 }]]
+    },
+    "Satu per Satu": {
+      "main": [
+        [{ "node": "Kirim Promo", "type": "main", "index": 0 }],
+        [{ "node": "Tandai Promo Terkirim", "type": "main", "index": 0 }]
+      ]
+    },
+    "Kirim Promo": {
+      "main": [[{ "node": "Jeda 2 Detik", "type": "main", "index": 0 }]]
+    },
+    "Jeda 2 Detik": {
+      "main": [[{ "node": "Satu per Satu", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "1",
+  "id": "restoran-lombok-broadcast",
+  "tags": [{ "id": "1", "name": "Restoran Lombok" }]
+}
