@@ -1,6 +1,8 @@
 # Setup Google Sheets
 
-Buat satu spreadsheet baru, lalu tambahkan 4 sheet (tab) berikut:
+Buat satu spreadsheet baru, lalu tambahkan 5 sheet (tab) berikut:
+
+---
 
 ## Sheet 1: Sessions
 
@@ -24,21 +26,26 @@ Menyimpan status percakapan setiap nomor WA.
 | last_updated | DateTime | Waktu update terakhir |
 
 **Nilai `state` yang valid:**
-- `start` / `main_menu` — Menu utama
-- `ordering` — Menunggu input pesanan
-- `order_confirm` — Menunggu konfirmasi pesanan
-- `order_name` — Menunggu nama pemesan
-- `order_type` — Menunggu tipe pesanan
-- `order_final` — Konfirmasi akhir pesanan
-- `reservation_guests` — Menunggu jumlah tamu
-- `reservation_date` — Menunggu tanggal
-- `reservation_time` — Menunggu jam
-- `reservation_name` — Menunggu nama reservasi
-- `reservation_confirm` — Konfirmasi reservasi
+
+| State | Keterangan |
+|---|---|
+| `start` / `main_menu` | Menu utama |
+| `ordering` | Menunggu input pesanan |
+| `order_confirm` | Menunggu konfirmasi pesanan |
+| `order_name` | Menunggu nama pemesan |
+| `order_type` | Menunggu tipe (dine-in/take-away) |
+| `order_final` | Konfirmasi akhir pesanan |
+| `reservation_guests` | Menunggu jumlah tamu |
+| `reservation_date` | Menunggu tanggal |
+| `reservation_time` | Menunggu jam |
+| `reservation_name` | Menunggu nama reservasi |
+| `reservation_confirm` | Konfirmasi reservasi |
+
+---
 
 ## Sheet 2: Orders
 
-Rekap semua pesanan yang masuk.
+Rekap semua pesanan masuk.
 
 | Kolom | Tipe | Keterangan |
 |---|---|---|
@@ -47,8 +54,12 @@ Rekap semua pesanan yang masuk.
 | customer_name | Text | Nama pelanggan |
 | items | Text | Daftar pesanan |
 | order_type | Text | `dine-in` atau `take-away` |
-| status | Text | `confirmed` / `processing` / `done` |
+| status | Text | `confirmed` / `feedback_sent` / `done` / `cancelled` |
 | order_time | DateTime | Waktu pesanan masuk |
+
+**Alur status:** `confirmed` → `feedback_sent` (otomatis 45 menit kemudian) → `done` (diupdate staff)
+
+---
 
 ## Sheet 3: Reservations
 
@@ -65,6 +76,8 @@ Rekap semua reservasi meja.
 | status | Text | `confirmed` / `cancelled` |
 | created_at | DateTime | Waktu booking dibuat |
 
+---
+
 ## Sheet 4: Menu
 
 Daftar menu — bisa diupdate langsung dari spreadsheet.
@@ -72,13 +85,13 @@ Daftar menu — bisa diupdate langsung dari spreadsheet.
 | Kolom | Tipe | Keterangan |
 |---|---|---|
 | id | Number | ID menu |
-| category | Text | Kategori (Ayam, Sate, Sayuran, dll) |
+| category | Text | Kategori |
 | name | Text | Nama menu |
 | description | Text | Deskripsi singkat |
-| price | Number | Harga (tanpa titik/koma) |
+| price | Number | Harga (angka saja, tanpa Rp) |
 | available | Boolean | `TRUE` / `FALSE` |
 
-### Isi Awal Menu Sasak Lombok
+### Data Awal Menu Sasak Lombok
 
 | id | category | name | price | available |
 |---|---|---|---|---|
@@ -99,13 +112,55 @@ Daftar menu — bisa diupdate langsung dari spreadsheet.
 | 15 | Minuman | Es Jeruk | 10000 | TRUE |
 | 16 | Minuman | Air Mineral | 5000 | TRUE |
 
+---
+
+## Sheet 5: Broadcasts
+
+Antrian pesan promo untuk dikirim ke semua pelanggan.
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| broadcast_id | Text | ID unik broadcast (misal: BC-001) |
+| message | Text | Isi pesan promo (bisa pakai format WA *bold*, _italic_) |
+| status | Text | `pending` = siap kirim, `sent` = sudah terkirim |
+| recipients | Number | Jumlah penerima (diisi otomatis setelah kirim) |
+| sent_at | DateTime | Waktu dikirim (diisi otomatis) |
+| created_at | DateTime | Waktu pesan dibuat |
+
+### Cara Kirim Promo
+
+1. Buka sheet **Broadcasts**
+2. Tambah baris baru:
+   - `broadcast_id`: BC-001 (nomor urut)
+   - `message`: isi pesan promo kamu
+   - `status`: **pending**
+3. Buka n8n → Workflow **02 - Broadcast Promo**
+4. Klik **Execute** (play manual)
+5. Bot akan kirim ke semua pelanggan dengan jeda 2 detik per nomor
+
+### Contoh Pesan Promo
+
+```
+*PROMO AKHIR PEKAN!* 🌶️
+
+Diskon 20% untuk Ayam Taliwang & Sate Rembiga!
+
+Berlaku: Sabtu - Minggu, 10.00 - 22.00 WITA
+
+Syarat: Menunjukkan pesan ini saat memesan
+
+Info & reservasi:
+https://wa.me/628xxxxxxxxx
+
+_Restoran Sasak Lombok_
+```
+
+---
+
 ## Cara Ambil Spreadsheet ID
 
-Buka spreadsheet di browser. URL-nya seperti ini:
+Buka spreadsheet di browser:
 ```
-https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms/edit
-                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                                       ini adalah GOOGLE_SHEET_ID
+https://docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit
 ```
-
-Salin ID tersebut ke file `.env`.
+Salin bagian `[SPREADSHEET_ID]` ke file `.env` sebagai `GOOGLE_SHEET_ID`.
