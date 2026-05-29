@@ -1,0 +1,122 @@
+{
+  "name": "04 - Restoran Sasak Lombok - Laporan Harian",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{
+            "field": "hours",
+            "hoursInterval": 1
+          }]
+        },
+        "triggerAtHour": 14,
+        "triggerAtMinute": 0
+      },
+      "id": "b1111111-1111-1111-1111-111111111111",
+      "name": "Setiap Hari 22:00 WITA",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300],
+      "notes": "14:00 UTC = 22:00 WITA (UTC+8)"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Orders", "mode": "name" },
+        "filtersUI": {
+          "values": [{
+            "lookupColumn": "status",
+            "lookupValue": "confirmed"
+          }]
+        },
+        "options": { "returnAllMatches": true }
+      },
+      "id": "b2222222-2222-2222-2222-222222222222",
+      "name": "Ambil Semua Pesanan Hari Ini",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [440, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Reservations", "mode": "name" },
+        "filtersUI": {
+          "values": [{
+            "lookupColumn": "status",
+            "lookupValue": "confirmed"
+          }]
+        },
+        "options": { "returnAllMatches": true }
+      },
+      "id": "b3333333-3333-3333-3333-333333333333",
+      "name": "Ambil Reservasi Hari Ini",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [440, 480],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter pesanan hari ini\nconst today = new Date().toISOString().slice(0, 10);\nconst allOrders = $('Ambil Semua Pesanan Hari Ini').all();\nconst allReservations = $('Ambil Reservasi Hari Ini').all();\n\nconst todayOrders = allOrders.filter(item => {\n  const orderTime = item.json.order_time || '';\n  return orderTime.startsWith(today);\n});\n\nconst todayReservations = allReservations.filter(item => {\n  const createdAt = item.json.created_at || '';\n  return createdAt.startsWith(today);\n});\n\n// Hitung statistik\nconst totalOrders = todayOrders.length;\nconst dineIn = todayOrders.filter(o => o.json.order_type === 'dine-in').length;\nconst takeAway = todayOrders.filter(o => o.json.order_type === 'take-away').length;\nconst totalReservations = todayReservations.length;\n\n// Rekap pesanan per item (simple text analysis)\nconst itemCount = {};\ntodayOrders.forEach(o => {\n  const items = (o.json.items || '').toLowerCase();\n  ['ayam taliwang', 'sate rembiga', 'plecing kangkung', 'beberuk terong', 'nasi balap', 'ikan bakar', 'es kelapa'].forEach(item => {\n    if (items.includes(item)) {\n      itemCount[item] = (itemCount[item] || 0) + 1;\n    }\n  });\n});\n\n// Urutkan menu terlaris\nconst sortedItems = Object.entries(itemCount)\n  .sort((a, b) => b[1] - a[1])\n  .slice(0, 5);\n\nconst menuTerlaris = sortedItems.length > 0\n  ? sortedItems.map((e, i) => `${i+1}. ${e[0].replace(/\\b\\w/g, c => c.toUpperCase())}: ${e[1]}x`).join('\\n')\n  : 'Tidak ada data';\n\n// Daftar pesanan hari ini\nconst orderList = todayOrders.length > 0\n  ? todayOrders.map(o => `- ${o.json.order_id} | ${o.json.customer_name} | ${o.json.order_type}`).join('\\n')\n  : 'Tidak ada pesanan';\n\n// Format tanggal Indonesia\nconst tanggal = new Date().toLocaleDateString('id-ID', {\n  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',\n  timeZone: 'Asia/Makassar'\n});\n\nconst laporan = `*LAPORAN HARIAN*\n*${$env.RESTAURANT_NAME}*\n${tanggal}\n\n*RINGKASAN PESANAN*\nTotal Pesanan: ${totalOrders}\nMakan di Tempat: ${dineIn}\nBawa Pulang: ${takeAway}\n\n*MENU TERLARIS*\n${menuTerlaris}\n\n*RESERVASI BARU*\nTotal Reservasi: ${totalReservations}\n\n*DAFTAR PESANAN*\n${orderList}\n\n_Laporan otomatis pukul 22:00 WITA_`;\n\nreturn [{ json: { laporan, totalOrders, totalReservations } }];"
+      },
+      "id": "b4444444-4444-4444-4444-444444444444",
+      "name": "Hitung Statistik",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }] },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={\"number\": \"{{ $env.WA_OWNER_NUMBER }}\", \"text\": \"{{ $json.laporan }}\"}",
+        "options": {}
+      },
+      "id": "b5555555-5555-5555-5555-555555555555",
+      "name": "Kirim Laporan ke Owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300]
+    }
+  ],
+  "connections": {
+    "Setiap Hari 22:00 WITA": {
+      "main": [[
+        { "node": "Ambil Semua Pesanan Hari Ini", "type": "main", "index": 0 },
+        { "node": "Ambil Reservasi Hari Ini", "type": "main", "index": 0 }
+      ]]
+    },
+    "Ambil Semua Pesanan Hari Ini": {
+      "main": [[{ "node": "Hitung Statistik", "type": "main", "index": 0 }]]
+    },
+    "Ambil Reservasi Hari Ini": {
+      "main": [[{ "node": "Hitung Statistik", "type": "main", "index": 0 }]]
+    },
+    "Hitung Statistik": {
+      "main": [[{ "node": "Kirim Laporan ke Owner", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "1",
+  "id": "restoran-lombok-daily-report",
+  "tags": [{ "id": "1", "name": "Restoran Lombok" }]
+}
