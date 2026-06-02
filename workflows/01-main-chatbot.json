@@ -1,60 +1,140 @@
 {
-  "name": "01 - Restoran Sasak Lombok - Main Chatbot",
+  "name": "01 - Restoran Sasak Lombok - Main Chatbot v2",
   "nodes": [
     {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "evolution-webhook",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "a1111111-1111-1111-1111-111111111111",
-      "name": "Evolution Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [200, 300],
+      "parameters": { "httpMethod": "POST", "path": "evolution-webhook", "responseMode": "responseNode", "options": {} },
+      "id": "a1111111-1111-1111-1111-111111111111", "name": "Evolution Webhook",
+      "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [200, 400],
       "webhookId": "evolution-restoran-lombok"
     },
     {
-      "parameters": {
-        "respondWith": "allIncomingItems",
-        "options": {}
-      },
-      "id": "a2222222-2222-2222-2222-222222222222",
-      "name": "Respond 200 OK",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [440, 160]
+      "parameters": { "respondWith": "allIncomingItems", "options": {} },
+      "id": "a2222222-2222-2222-2222-222222222222", "name": "Respond 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [440, 200]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [{ "id": "c1", "leftValue": "={{ $json.body.data.key.fromMe }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        }, "options": {}
+      },
+      "id": "a3333333-3333-3333-3333-333333333333", "name": "Is From Bot?",
+      "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body;\nconst data = body.data || {};\nconst key = data.key || {};\nconst message = data.message || {};\nconst text = message.conversation\n  || (message.extendedTextMessage && message.extendedTextMessage.text)\n  || (message.buttonsResponseMessage && message.buttonsResponseMessage.selectedDisplayText)\n  || (message.listResponseMessage && message.listResponseMessage.title)\n  || '';\nconst remoteJid = key.remoteJid || '';\nif (remoteJid.includes('@g.us')) return [];\nconst phone = remoteJid.replace('@s.whatsapp.net', '');\nreturn [{ json: { phone, name: data.pushName || 'Pelanggan', message: text, messageLower: text.toLowerCase().trim(), instance: body.instance || $env.EVOLUTION_INSTANCE, messageId: key.id } }];"
+      },
+      "id": "a4444444-4444-4444-4444-444444444444", "name": "Extract Message Data",
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
           "conditions": [{
-            "id": "cond-fromme",
-            "leftValue": "={{ $json.body.data.key.fromMe }}",
+            "id": "c-staff",
+            "leftValue": "={{ $json.phone === $env.WA_KITCHEN_NUMBER || $json.phone === $env.WA_OWNER_NUMBER }}",
             "rightValue": true,
             "operator": { "type": "boolean", "operation": "equals" }
           }],
           "combinator": "and"
-        },
-        "options": {}
+        }, "options": {}
       },
-      "id": "a3333333-3333-3333-3333-333333333333",
-      "name": "Is From Bot?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [440, 300]
+      "id": "s1000001-1000-1000-1000-s10000010001", "name": "Is Staff?",
+      "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [880, 400]
     },
     {
       "parameters": {
-        "jsCode": "const body = $json.body;\nconst data = body.data || {};\nconst key = data.key || {};\nconst message = data.message || {};\n\nconst text = message.conversation\n  || (message.extendedTextMessage && message.extendedTextMessage.text)\n  || (message.buttonsResponseMessage && message.buttonsResponseMessage.selectedDisplayText)\n  || (message.listResponseMessage && message.listResponseMessage.title)\n  || '';\n\nconst remoteJid = key.remoteJid || '';\n// Skip group messages\nif (remoteJid.includes('@g.us')) return [];\n\nconst phone = remoteJid.replace('@s.whatsapp.net', '');\n\nreturn [{ json: {\n  phone,\n  name: data.pushName || 'Pelanggan',\n  message: text,\n  messageLower: text.toLowerCase().trim(),\n  instance: body.instance || $env.EVOLUTION_INSTANCE,\n  messageId: key.id\n}}];"
+        "jsCode": "const phone = $json.phone;\nconst msg = $json.messageLower;\nconst originalMsg = $json.message;\nconst instance = $json.instance;\nconst parts = originalMsg.trim().split(/\\s+/);\nlet staffAction = 'help';\nlet targetOrderId = null;\nlet quickResponse = '';\n\nif (msg.startsWith('selesai ') && parts[1]) {\n  targetOrderId = parts[1].toUpperCase();\n  staffAction = 'complete';\n} else if (msg.startsWith('batal ') && parts[1]) {\n  targetOrderId = parts[1].toUpperCase();\n  staffAction = 'cancel';\n} else if (msg === 'status' || msg === 'daftar' || msg === 'ringkasan') {\n  staffAction = 'status';\n} else {\n  staffAction = 'help';\n  quickResponse = '*PERINTAH STAFF*\\n\\nSELESAI [ID] — Pesanan siap, notif customer\\nBALT [ID] — Batalkan pesanan\\nSTATUS — Ringkasan pesanan hari ini\\n\\nContoh: SELESAI ORD-123456';\n}\nreturn [{ json: { phone, instance, staffAction, targetOrderId, quickResponse, originalMsg } }];"
       },
-      "id": "a4444444-4444-4444-4444-444444444444",
-      "name": "Extract Message Data",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [660, 300]
+      "id": "s1000002-1000-1000-1000-s10000020002", "name": "Detect Staff Command",
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1100, 260]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [{ "id": "c-lookup", "leftValue": "={{ $json.staffAction }}", "rightValue": "help", "operator": { "type": "string", "operation": "notEquals" } }, { "id": "c-lookup2", "leftValue": "={{ $json.staffAction }}", "rightValue": "status", "operator": { "type": "string", "operation": "notEquals" } }],
+          "combinator": "and"
+        }, "options": {}
+      },
+      "id": "s1000003-1000-1000-1000-s10000030003", "name": "Needs Order Lookup?",
+      "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [1320, 260]
+    },
+    {
+      "parameters": {
+        "operation": "lookup",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Orders", "mode": "name" },
+        "lookupColumn": "order_id",
+        "lookupValue": "={{ $('Detect Staff Command').item.json.targetOrderId }}",
+        "options": { "returnAllMatches": false }
+      },
+      "id": "s1000004-1000-1000-1000-s10000040004", "name": "Read Order by ID",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4, "position": [1540, 180],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cmd = $('Detect Staff Command').item.json;\nconst orderItems = $input.all();\nlet staffMsg = '';\nlet customerPhone = null;\nlet customerMsg = '';\nlet newStatus = null;\n\nif (cmd.staffAction === 'help') {\n  staffMsg = cmd.quickResponse;\n} else if (orderItems.length === 0 || !orderItems[0].json.order_id) {\n  staffMsg = `❌ Pesanan *${cmd.targetOrderId}* tidak ditemukan.`;\n} else {\n  const order = orderItems[0].json;\n  customerPhone = String(order.phone);\n  if (cmd.staffAction === 'complete') {\n    newStatus = 'done';\n    customerMsg = `Halo ${order.customer_name}! 🍽️\\n\\nPesanan kamu *${cmd.targetOrderId}* sudah siap!\\n\\nSilakan ambil di kasir.\\nTerima kasih sudah memesan! 🙏`;\n    staffMsg = `✅ *${cmd.targetOrderId}* ditandai selesai.\\nNotif dikirim ke ${customerPhone}.`;\n  } else if (cmd.staffAction === 'cancel') {\n    newStatus = 'cancelled';\n    customerMsg = `Maaf ${order.customer_name},\\n\\nPesanan *${cmd.targetOrderId}* harus kami batalkan.\\n\\nInfo: ${$env.RESTAURANT_PHONE}\\nMohon maaf atas ketidaknyamanannya. 🙏`;\n    staffMsg = `❌ *${cmd.targetOrderId}* dibatalkan.\\nNotif dikirim ke ${customerPhone}.`;\n  }\n}\n\nreturn [{ json: { staffMsg, customerPhone, customerMsg, newStatus, targetOrderId: cmd.targetOrderId, instance: cmd.instance, staffPhone: cmd.phone } }];"
+      },
+      "id": "s1000005-1000-1000-1000-s10000050005", "name": "Build Staff Response",
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1760, 180]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [{ "id": "c-cust", "leftValue": "={{ $json.customerPhone }}", "rightValue": "", "operator": { "type": "string", "operation": "notEquals" } }],
+          "combinator": "and"
+        }, "options": {}
+      },
+      "id": "s1000006-1000-1000-1000-s10000060006", "name": "Has Customer to Notify?",
+      "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [1980, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }] },
+        "sendBody": true, "contentType": "json",
+        "body": "={{ JSON.stringify({ number: $json.customerPhone, text: $json.customerMsg }) }}",
+        "options": {}
+      },
+      "id": "s1000007-1000-1000-1000-s10000070007", "name": "Notify Customer (Staff)",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2200, 120]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Orders", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "order_id": "={{ $('Build Staff Response').item.json.targetOrderId }}", "status": "={{ $('Build Staff Response').item.json.newStatus }}" },
+          "matchingColumns": ["order_id"], "schema": []
+        }, "options": {}
+      },
+      "id": "s1000008-1000-1000-1000-s10000080008", "name": "Update Order Status (Staff)",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4, "position": [2420, 120],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }] },
+        "sendBody": true, "contentType": "json",
+        "body": "={{ JSON.stringify({ number: $('Detect Staff Command').item.json.phone, text: $('Build Staff Response').item.json.staffMsg }) }}",
+        "options": {}
+      },
+      "id": "s1000009-1000-1000-1000-s10000090009", "name": "Reply to Staff",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2200, 280]
     },
     {
       "parameters": {
@@ -65,27 +145,27 @@
         "lookupValue": "={{ $json.phone }}",
         "options": { "returnAllMatches": false }
       },
-      "id": "a5555555-5555-5555-5555-555555555555",
-      "name": "Get Session",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [880, 300],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
-          "name": "Google Sheets"
-        }
-      }
+      "id": "a5555555-5555-5555-5555-555555555555", "name": "Get Session",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4, "position": [1100, 540],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Google Sheets" } }
     },
     {
       "parameters": {
-        "jsCode": "const msgData = $('Extract Message Data').item.json;\nconst sessionItems = $input.all();\n\nconst phone = msgData.phone;\nconst name = msgData.name;\nconst msg = msgData.messageLower;\nconst originalMsg = msgData.message;\nconst instance = msgData.instance;\n\nlet session = {};\nif (sessionItems.length > 0 && sessionItems[0].json && sessionItems[0].json.phone) {\n  session = sessionItems[0].json;\n}\nconst state = session.state || 'start';\n\n// ─── MESSAGE TEMPLATES ───────────────────────────────────────────\nfunction mainMenu(name) {\n  return `*RESTORAN SASAK LOMBOK*\nHalo, ${name}! Selamat datang!\n\nMasakan khas Lombok yang otentik & lezat\n\nSilakan pilih menu:\n1 - Lihat Menu Makanan\n2 - Pesan Makanan\n3 - Reservasi Meja\n4 - Jam Operasional\n5 - Lokasi & Alamat\n6 - Hubungi Kami\n\nKetik angka untuk memilih`;\n}\n\nfunction foodMenu() {\n  return `*MENU RESTORAN SASAK LOMBOK*\n\n*AYAM TALIWANG & PELECING*\n- Ayam Taliwang Pedas: Rp 45.000\n- Ayam Taliwang Tidak Pedas: Rp 45.000\n- Pelecing Ayam: Rp 40.000\n\n*SATE KHAS LOMBOK*\n- Sate Rembiga: Rp 35.000\n- Sate Ayam Bulayak: Rp 30.000\n\n*SAYURAN*\n- Plecing Kangkung: Rp 20.000\n- Beberuk Terong: Rp 15.000\n- Urap Sayur: Rp 18.000\n\n*NASI & LAUK*\n- Nasi Balap Puyung: Rp 25.000\n- Nasi Putih: Rp 5.000\n\n*IKAN*\n- Ikan Bakar Bumbu Lombok: Rp 55.000\n- Ikan Goreng Pedas: Rp 50.000\n\n*MINUMAN*\n- Es Kelapa Muda: Rp 15.000\n- Es Teh Manis: Rp 8.000\n- Es Jeruk: Rp 10.000\n- Air Mineral: Rp 5.000\n\nUntuk memesan ketik *2* atau *pesan*`;\n}\n\nconst GREET = ['halo','hai','hello','hi','mulai','start','help','menu','0','batal','kembali','home'];\n\nlet responseText = '';\nlet newState = state;\nlet sessionUpdate = {};\n\n// Reset ke menu utama\nif (GREET.includes(msg)) {\n  responseText = mainMenu(name);\n  newState = 'main_menu';\n}\n// ─── MAIN MENU ───────────────────────────────────────────────────\nelse if (state === 'start' || state === 'main_menu') {\n  if (msg === '1' || msg.includes('lihat menu')) {\n    responseText = foodMenu();\n  } else if (msg === '2' || msg.includes('pesan') || msg.includes('order')) {\n    responseText = '*PESAN MAKANAN*\n\nKetik pesanan kamu, contoh:\n2 Ayam Taliwang Pedas, 1 Plecing Kangkung, 2 Es Kelapa Muda\n\nLihat menu dulu? Ketik *1*\nKetik *0* untuk batal';\n    newState = 'ordering';\n  } else if (msg === '3' || msg.includes('reservasi') || msg.includes('booking')) {\n    responseText = '*RESERVASI MEJA*\n\nBerapa orang yang akan datang?\nContoh: 4\n\nKetik *0* untuk batal';\n    newState = 'reservation_guests';\n  } else if (msg === '4' || msg.includes('jam') || msg.includes('buka')) {\n    responseText = '*JAM OPERASIONAL*\n\nSenin - Minggu\n10.00 - 22.00 WITA\n\nKetik *0* untuk menu utama';\n  } else if (msg === '5' || msg.includes('lokasi') || msg.includes('alamat')) {\n    responseText = `*LOKASI*\n\n${$env.RESTAURANT_ADDRESS}\n\nGoogle Maps: ${$env.RESTAURANT_MAPS}\n\nKetik *0* untuk menu utama`;\n  } else if (msg === '6' || msg.includes('hubungi') || msg.includes('kontak')) {\n    responseText = `*HUBUNGI KAMI*\n\nWhatsApp: ${$env.RESTAURANT_PHONE}\nInstagram: @restoran.sasak.lombok\n\nJam 10.00 - 22.00 WITA`;\n  } else {\n    responseText = mainMenu(name);\n    newState = 'main_menu';\n  }\n}\n// ─── ORDERING ────────────────────────────────────────────────────\nelse if (state === 'ordering') {\n  if (originalMsg && originalMsg.length > 3) {\n    sessionUpdate.pending_order = originalMsg;\n    responseText = `*KONFIRMASI PESANAN*\n\nPesanan kamu:\n${originalMsg}\n\nSudah benar?\nKetik *ya* untuk konfirmasi\nKetik *tidak* untuk ubah\nKetik *0* untuk batal`;\n    newState = 'order_confirm';\n  } else {\n    responseText = 'Masukkan pesanan kamu, contoh:\n2 Ayam Taliwang, 1 Plecing Kangkung\n\nKetik *0* untuk batal';\n  }\n}\nelse if (state === 'order_confirm') {\n  if (['ya','yes','iya'].includes(msg)) {\n    responseText = 'Siapa nama pemesan?\n\nKetik *0* untuk batal';\n    newState = 'order_name';\n  } else if (['tidak','no','bukan'].includes(msg)) {\n    responseText = 'Silakan ketik ulang pesanan kamu:\n\nKetik *0* untuk batal';\n    newState = 'ordering';\n  } else {\n    responseText = 'Ketik *ya* untuk konfirmasi atau *tidak* untuk ubah pesanan';\n  }\n}\nelse if (state === 'order_name') {\n  if (originalMsg && originalMsg.length > 1) {\n    sessionUpdate.order_customer_name = originalMsg;\n    responseText = `Halo ${originalMsg}! Pesanan untuk:\n\n1 - Makan di tempat (Dine-in)\n2 - Bawa pulang (Take-away)\n\nKetik *1* atau *2*`;\n    newState = 'order_type';\n  }\n}\nelse if (state === 'order_type') {\n  const isDineIn = msg === '1' || msg.includes('dine') || msg.includes('tempat');\n  const isTakeAway = msg === '2' || msg.includes('bawa') || msg.includes('take');\n  if (isDineIn || isTakeAway) {\n    const tipe = isDineIn ? 'Makan di tempat' : 'Bawa pulang';\n    sessionUpdate.order_type = isDineIn ? 'dine-in' : 'take-away';\n    const cname = session.order_customer_name || sessionUpdate.order_customer_name || '-';\n    const items = session.pending_order || '-';\n    responseText = `*KONFIRMASI AKHIR*\n\nPesanan: ${items}\nNama: ${cname}\nTipe: ${tipe}\n\nKetik *konfirmasi* untuk selesai\nKetik *0* untuk batal`;\n    newState = 'order_final';\n  } else {\n    responseText = 'Ketik *1* untuk makan di tempat atau *2* untuk bawa pulang';\n  }\n}\nelse if (state === 'order_final') {\n  if (msg === 'konfirmasi' || msg === 'ya' || msg === 'yes') {\n    const orderId = 'ORD-' + Date.now().toString().slice(-6);\n    sessionUpdate.last_order_id = orderId;\n    sessionUpdate.order_status = 'confirmed';\n    responseText = `*PESANAN BERHASIL!*\n\nNomor Pesanan: *${orderId}*\nEstimasi: 30-45 menit\n\nTerima kasih sudah memesan di Restoran Sasak Lombok!\n\nKetik *0* untuk menu utama`;\n    newState = 'main_menu';\n  } else {\n    responseText = 'Ketik *konfirmasi* untuk selesaikan atau *0* untuk batal';\n  }\n}\n// ─── RESERVATION ─────────────────────────────────────────────────\nelse if (state === 'reservation_guests') {\n  const n = parseInt((msg.match(/\\d+/) || [])[0]);\n  if (n >= 1 && n <= 50) {\n    sessionUpdate.reservation_guests = String(n);\n    responseText = 'Tanggal kedatangan?\nContoh: 25 Juni 2025\n\nKetik *0* untuk batal';\n    newState = 'reservation_date';\n  } else {\n    responseText = 'Masukkan jumlah tamu (1-50), contoh: 4';\n  }\n}\nelse if (state === 'reservation_date') {\n  if (originalMsg && originalMsg.length > 2) {\n    sessionUpdate.reservation_date = originalMsg;\n    responseText = 'Jam kedatangan?\nContoh: 19:00\n\nKetik *0* untuk batal';\n    newState = 'reservation_time';\n  } else {\n    responseText = 'Masukkan tanggal, contoh: 25 Juni 2025';\n  }\n}\nelse if (state === 'reservation_time') {\n  if (originalMsg && originalMsg.length > 1) {\n    sessionUpdate.reservation_time = originalMsg;\n    responseText = 'Nama untuk reservasi?\n\nKetik *0* untuk batal';\n    newState = 'reservation_name';\n  } else {\n    responseText = 'Masukkan jam kedatangan, contoh: 19:00';\n  }\n}\nelse if (state === 'reservation_name') {\n  if (originalMsg && originalMsg.length > 1) {\n    const resId = 'RES-' + Date.now().toString().slice(-6);\n    sessionUpdate.reservation_name = originalMsg;\n    sessionUpdate.last_reservation_id = resId;\n    const g = session.reservation_guests || sessionUpdate.reservation_guests || '-';\n    const d = session.reservation_date || sessionUpdate.reservation_date || '-';\n    const t = session.reservation_time || sessionUpdate.reservation_time || '-';\n    responseText = `*KONFIRMASI RESERVASI*\n\nNomor: *${resId}*\nNama: ${originalMsg}\nTamu: ${g} orang\nTanggal: ${d}\nJam: ${t}\n\nKetik *ya* untuk konfirmasi\nKetik *tidak* untuk ulang\nKetik *0* untuk batal`;\n    newState = 'reservation_confirm';\n  }\n}\nelse if (state === 'reservation_confirm') {\n  if (['ya','yes','iya'].includes(msg)) {\n    sessionUpdate.reservation_status = 'confirmed';\n    const rname = session.reservation_name || sessionUpdate.reservation_name || '-';\n    const resId = session.last_reservation_id || sessionUpdate.last_reservation_id || '-';\n    responseText = `*RESERVASI BERHASIL!*\n\nNomor: *${resId}*\nNama: ${rname}\n\nSampai jumpa di Restoran Sasak Lombok!\nInfo: ${$env.RESTAURANT_PHONE}\n\nKetik *0* untuk menu utama`;\n    newState = 'main_menu';\n  } else if (['tidak','no'].includes(msg)) {\n    responseText = 'Baik, mulai ulang reservasi.\n\nBerapa orang yang akan datang?';\n    newState = 'reservation_guests';\n  } else {\n    responseText = 'Ketik *ya* untuk konfirmasi atau *tidak* untuk mulai ulang';\n  }\n}\nelse {\n  responseText = mainMenu(name);\n  newState = 'main_menu';\n}\n\nreturn [{ json: {\n  phone, name, instance, responseText, newState,\n  sessionUpdate: {\n    ...sessionUpdate,\n    state: newState,\n    last_updated: new Date().toISOString()\n  },\n  currentSession: session\n}}];"
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Menu", "mode": "name" },
+        "options": { "returnAllMatches": true }
       },
-      "id": "a6666666-6666-6666-6666-666666666666",
-      "name": "Route & Build Response",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1100, 300]
+      "id": "c1000001-1000-1000-1000-c10000010001", "name": "Read Menu from Sheets",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4, "position": [1320, 540],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msgData = $('Extract Message Data').item.json;\nconst sessionItems = $('Get Session').all();\nconst menuItems = $('Read Menu from Sheets').all().map(i => i.json);\n\nconst phone = msgData.phone;\nconst name = msgData.name;\nconst msg = msgData.messageLower;\nconst originalMsg = msgData.message;\nconst instance = msgData.instance;\n\nlet session = {};\nif (sessionItems.length > 0 && sessionItems[0].json && sessionItems[0].json.phone) {\n  session = sessionItems[0].json;\n}\nconst state = session.state || 'start';\n\n// ── HELPERS ──────────────────────────────────────────────────────────────────────────────────────────\nfunction fmtRp(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }\n\nfunction mainMenu(name) {\n  return `*RESTORAN SASAK LOMBOK*\\nHalo, ${name}! Selamat datang!\\n\\n1 - Lihat Menu Makanan\\n2 - Pesan Makanan\\n3 - Reservasi Meja\\n4 - Jam Operasional\\n5 - Lokasi & Alamat\\n6 - Hubungi Kami\\n\\nKetik angka untuk memilih`;\n}\n\nfunction buildFoodMenu() {\n  const available = menuItems.filter(i => String(i.available).toLowerCase() === 'true' || i.available === true);\n  if (available.length === 0) return 'Menu sedang diperbarui. Hubungi kami: ' + $env.RESTAURANT_PHONE;\n  const cats = {};\n  available.forEach(i => { if (!cats[i.category]) cats[i.category] = []; cats[i.category].push(i); });\n  let text = '*MENU RESTORAN SASAK LOMBOK*\\n\\n';\n  Object.entries(cats).forEach(([cat, items]) => {\n    text += `*${cat}*\\n`;\n    items.forEach(i => { text += `• ${i.name}: ${fmtRp(i.price)}\\n`; });\n    text += '\\n';\n  });\n  text += 'Untuk memesan ketik *2* atau *pesan*';\n  return text;\n}\n\nfunction parseOrder(orderText) {\n  const available = menuItems.filter(i => String(i.available).toLowerCase() === 'true' || i.available === true);\n  const parts = orderText.split(',').map(p => p.trim()).filter(p => p);\n  let breakdown = [], total = 0, unmatched = [];\n  parts.forEach(part => {\n    const qtyMatch = part.match(/^(\\d+)\\s+(.+)$/);\n    const qty = qtyMatch ? parseInt(qtyMatch[1]) : 1;\n    const itemName = (qtyMatch ? qtyMatch[2] : part).trim().toLowerCase();\n    const found = available.find(m =>\n      m.name.toLowerCase().includes(itemName) ||\n      itemName.includes(m.name.toLowerCase().split(' ')[0]) ||\n      itemName.includes(m.name.toLowerCase().split(' ').slice(0,2).join(' '))\n    );\n    if (found) {\n      const subtotal = qty * Number(found.price);\n      total += subtotal;\n      breakdown.push(`${qty}x ${found.name} = ${fmtRp(subtotal)}`);\n    } else {\n      unmatched.push(`${qty}x ${itemName} (tidak ditemukan)`);\n    }\n  });\n  return { breakdown, total, unmatched };\n}\n\n// ── ROUTING ─────────────────────────────────────────────────────────────────────────────────────────\nconst GREET = ['halo','hai','hello','hi','mulai','start','help','menu','0','batal','kembali','home'];\nlet responseText = '', newState = state, sessionUpdate = {};\n\nif (GREET.includes(msg)) {\n  responseText = mainMenu(name); newState = 'main_menu';\n}\n// ── MAIN MENU ───────────────────────────────────────────────────────────────────────────────────\nelse if (state === 'start' || state === 'main_menu') {\n  if (msg === '1' || msg.includes('lihat menu')) { responseText = buildFoodMenu(); }\n  else if (msg === '2' || msg.includes('pesan') || msg.includes('order')) {\n    responseText = '*PESAN MAKANAN*\\n\\nKetik pesanan kamu, contoh:\\n2 Ayam Taliwang Pedas, 1 Plecing Kangkung, 2 Es Kelapa Muda\\n\\nLihat menu? Ketik *1*\\nKetik *0* untuk batal';\n    newState = 'ordering';\n  }\n  else if (msg === '3' || msg.includes('reservasi') || msg.includes('booking')) {\n    responseText = '*RESERVASI MEJA*\\n\\nBerapa orang yang akan datang?\\nKetik *0* untuk batal';\n    newState = 'reservation_guests';\n  }\n  else if (msg === '4' || msg.includes('jam') || msg.includes('buka')) { responseText = '*JAM OPERASIONAL*\\n\\nSenin - Minggu\\n10.00 - 22.00 WITA\\n\\nKetik *0* untuk menu utama'; }\n  else if (msg === '5' || msg.includes('lokasi') || msg.includes('alamat')) { responseText = `*LOKASI*\\n\\n${$env.RESTAURANT_ADDRESS}\\n\\nGoogle Maps: ${$env.RESTAURANT_MAPS}\\n\\nKetik *0* untuk menu utama`; }\n  else if (msg === '6' || msg.includes('hubungi') || msg.includes('kontak')) { responseText = `*HUBUNGI KAMI*\\n\\nWhatsApp: ${$env.RESTAURANT_PHONE}\\nInstagram: @restoran.sasak.lombok\\n\\nJam 10.00 - 22.00 WITA`; }\n  else { responseText = mainMenu(name); newState = 'main_menu'; }\n}\n// ── ORDERING ────────────────────────────────────────────────────────────────────────────────────\nelse if (state === 'ordering') {\n  if (originalMsg && originalMsg.length > 3) {\n    const { breakdown, total, unmatched } = parseOrder(originalMsg);\n    sessionUpdate.pending_order = originalMsg;\n    sessionUpdate.order_total = String(total);\n    let confirmText = '*KONFIRMASI PESANAN*\\n\\n';\n    if (breakdown.length > 0) { breakdown.forEach(l => { confirmText += l + '\\n'; }); confirmText += '\\n'; }\n    if (unmatched.length > 0) { confirmText += '⚠️ Tidak dikenali:\\n'; unmatched.forEach(l => { confirmText += l + '\\n'; }); confirmText += '\\n'; }\n    if (total > 0) confirmText += `*Total: ${fmtRp(total)}*\\n\\n`;\n    confirmText += 'Sudah benar?\\nKetik *ya* untuk konfirmasi\\nKetik *tidak* untuk ubah\\nKetik *0* untuk batal';\n    responseText = confirmText; newState = 'order_confirm';\n  } else { responseText = 'Masukkan pesanan kamu\\nContoh: 2 Ayam Taliwang, 1 Plecing Kangkung\\n\\nKetik *0* untuk batal'; }\n}\nelse if (state === 'order_confirm') {\n  if (['ya','yes','iya'].includes(msg)) { responseText = 'Siapa nama pemesan?\\n\\nKetik *0* untuk batal'; newState = 'order_name'; }\n  else if (['tidak','no','bukan'].includes(msg)) { responseText = 'Silakan ketik ulang pesanan kamu:\\n\\nKetik *0* untuk batal'; newState = 'ordering'; }\n  else { responseText = 'Ketik *ya* untuk konfirmasi atau *tidak* untuk ubah pesanan'; }\n}\nelse if (state === 'order_name') {\n  if (originalMsg && originalMsg.length > 1) {\n    sessionUpdate.order_customer_name = originalMsg;\n    responseText = `Halo ${originalMsg}! Pesanan untuk:\\n\\n1 - Makan di tempat (Dine-in)\\n2 - Bawa pulang (Take-away)\\n\\nKetik *1* atau *2*`;\n    newState = 'order_type';\n  }\n}\nelse if (state === 'order_type') {\n  const isDineIn = msg === '1' || msg.includes('dine') || msg.includes('tempat');\n  const isTakeAway = msg === '2' || msg.includes('bawa') || msg.includes('take');\n  if (isDineIn || isTakeAway) {\n    sessionUpdate.order_type = isDineIn ? 'dine-in' : 'take-away';\n    const cname = sessionUpdate.order_customer_name || session.order_customer_name || '-';\n    const items = session.pending_order || '-';\n    const total = sessionUpdate.order_total || session.order_total || '0';\n    const tipe = isDineIn ? 'Makan di tempat' : 'Bawa pulang';\n    responseText = `*KONFIRMASI AKHIR*\\n\\nPesanan: ${items}\\nNama: ${cname}\\nTipe: ${tipe}${total !== '0' ? '\\nTotal: ' + fmtRp(total) : ''}\\n\\nKetik *konfirmasi* untuk selesai\\nKetik *0* untuk batal`;\n    newState = 'order_final';\n  } else { responseText = 'Ketik *1* untuk makan di tempat atau *2* untuk bawa pulang'; }\n}\nelse if (state === 'order_final') {\n  if (msg === 'konfirmasi' || msg === 'ya' || msg === 'yes') {\n    const orderId = 'ORD-' + Date.now().toString().slice(-6);\n    const total = session.order_total || sessionUpdate.order_total || '0';\n    sessionUpdate.last_order_id = orderId; sessionUpdate.order_status = 'confirmed';\n    responseText = `*PESANAN BERHASIL!*\\n\\nNomor: *${orderId}*\\nEstimasi: 30-45 menit${total !== '0' ? '\\nTotal: ' + fmtRp(total) : ''}\\n\\nTerima kasih sudah memesan di Restoran Sasak Lombok!\\n\\nKetik *0* untuk menu utama`;\n    newState = 'main_menu';\n  } else { responseText = 'Ketik *konfirmasi* untuk selesaikan atau *0* untuk batal'; }\n}\n// ── RESERVATION ──────────────────────────────────────────────────────────────────────────────────\nelse if (state === 'reservation_guests') {\n  const n = parseInt((msg.match(/\\d+/) || [])[0]);\n  if (n >= 1 && n <= 50) { sessionUpdate.reservation_guests = String(n); responseText = 'Tanggal kedatangan?\\nContoh: 25 Juni 2025\\n\\nKetik *0* untuk batal'; newState = 'reservation_date'; }\n  else { responseText = 'Masukkan jumlah tamu (1-50), contoh: 4'; }\n}\nelse if (state === 'reservation_date') {\n  if (originalMsg && originalMsg.length > 2) { sessionUpdate.reservation_date = originalMsg; responseText = 'Jam kedatangan?\\nContoh: 19:00\\n\\nKetik *0* untuk batal'; newState = 'reservation_time'; }\n  else { responseText = 'Masukkan tanggal, contoh: 25 Juni 2025'; }\n}\nelse if (state === 'reservation_time') {\n  if (originalMsg && originalMsg.length > 1) { sessionUpdate.reservation_time = originalMsg; responseText = 'Nama untuk reservasi?\\n\\nKetik *0* untuk batal'; newState = 'reservation_name'; }\n  else { responseText = 'Masukkan jam kedatangan, contoh: 19:00'; }\n}\nelse if (state === 'reservation_name') {\n  if (originalMsg && originalMsg.length > 1) {\n    const resId = 'RES-' + Date.now().toString().slice(-6);\n    sessionUpdate.reservation_name = originalMsg; sessionUpdate.last_reservation_id = resId;\n    const g = session.reservation_guests || sessionUpdate.reservation_guests || '-';\n    const d = session.reservation_date || sessionUpdate.reservation_date || '-';\n    const t = session.reservation_time || sessionUpdate.reservation_time || '-';\n    responseText = `*KONFIRMASI RESERVASI*\\n\\nNomor: *${resId}*\\nNama: ${originalMsg}\\nTamu: ${g} orang\\nTanggal: ${d}\\nJam: ${t}\\n\\nKetik *ya* untuk konfirmasi\\nKetik *tidak* untuk ulang\\nKetik *0* untuk batal`;\n    newState = 'reservation_confirm';\n  }\n}\nelse if (state === 'reservation_confirm') {\n  if (['ya','yes','iya'].includes(msg)) {\n    sessionUpdate.reservation_status = 'confirmed';\n    const rname = session.reservation_name || sessionUpdate.reservation_name || '-';\n    const resId = session.last_reservation_id || sessionUpdate.last_reservation_id || '-';\n    responseText = `*RESERVASI BERHASIL!*\\n\\nNomor: *${resId}*\\nNama: ${rname}\\n\\nSampai jumpa di Restoran Sasak Lombok! 🌶️\\nInfo: ${$env.RESTAURANT_PHONE}\\n\\nKetik *0* untuk menu utama`;\n    newState = 'main_menu';\n  } else if (['tidak','no'].includes(msg)) { responseText = 'Baik, mulai ulang reservasi.\\n\\nBerapa orang yang akan datang?'; newState = 'reservation_guests'; }\n  else { responseText = 'Ketik *ya* untuk konfirmasi atau *tidak* untuk mulai ulang'; }\n}\n// ── AWAITING FEEDBACK ───────────────────────────────────────────────────────────────────────\nelse if (state === 'awaiting_feedback') {\n  const rating = parseInt(msg);\n  if (rating >= 1 && rating <= 5) {\n    sessionUpdate.feedback_rating = String(rating);\n    sessionUpdate.feedback_status = 'rated';\n    responseText = `Terima kasih atas rating *${rating}/5* kamu! 🙏\\nKami terus berusaha memberikan yang terbaik.\\n\\nKetik *0* untuk menu utama`;\n    newState = 'main_menu';\n  } else if (originalMsg.length > 5) {\n    sessionUpdate.feedback_comment = originalMsg;\n    responseText = 'Terima kasih masukannya!\\n\\nBerikan juga rating (ketik angka *1-5*):\\n5=Sangat Puas, 4=Puas, 3=Cukup, 2=Kurang, 1=Sangat Kurang';\n  } else {\n    responseText = 'Ketik angka *1-5* untuk memberi rating:\\n5=Sangat Puas, 4=Puas, 3=Cukup, 2=Kurang, 1=Sangat Kurang';\n  }\n}\nelse { responseText = mainMenu(name); newState = 'main_menu'; }\n\nreturn [{ json: { phone, name, instance, responseText, newState, sessionUpdate: { ...sessionUpdate, state: newState, last_updated: new Date().toISOString() }, currentSession: session } }];"
+      },
+      "id": "a6666666-6666-6666-6666-666666666666", "name": "Route & Build Response",
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1540, 540]
     },
     {
       "parameters": {
@@ -93,16 +173,12 @@
         "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
         "sendHeaders": true,
         "headerParameters": { "parameters": [{ "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }] },
-        "sendBody": true,
-        "contentType": "json",
-        "body": "={\"number\": \"{{ $json.phone }}\", \"text\": \"{{ $json.responseText }}\"}",
+        "sendBody": true, "contentType": "json",
+        "body": "={{ JSON.stringify({ number: $json.phone, text: $json.responseText }) }}",
         "options": { "timeout": 10000 }
       },
-      "id": "a7777777-7777-7777-7777-777777777777",
-      "name": "Send WA Message",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1320, 300]
+      "id": "a7777777-7777-7777-7777-777777777777", "name": "Send WA Message",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1760, 540]
     },
     {
       "parameters": {
@@ -119,79 +195,64 @@
             "order_customer_name": "={{ $('Route & Build Response').item.json.sessionUpdate.order_customer_name || $('Route & Build Response').item.json.currentSession.order_customer_name || '' }}",
             "order_type": "={{ $('Route & Build Response').item.json.sessionUpdate.order_type || $('Route & Build Response').item.json.currentSession.order_type || '' }}",
             "last_order_id": "={{ $('Route & Build Response').item.json.sessionUpdate.last_order_id || $('Route & Build Response').item.json.currentSession.last_order_id || '' }}",
+            "order_total": "={{ $('Route & Build Response').item.json.sessionUpdate.order_total || $('Route & Build Response').item.json.currentSession.order_total || '' }}",
             "reservation_guests": "={{ $('Route & Build Response').item.json.sessionUpdate.reservation_guests || $('Route & Build Response').item.json.currentSession.reservation_guests || '' }}",
             "reservation_date": "={{ $('Route & Build Response').item.json.sessionUpdate.reservation_date || $('Route & Build Response').item.json.currentSession.reservation_date || '' }}",
             "reservation_time": "={{ $('Route & Build Response').item.json.sessionUpdate.reservation_time || $('Route & Build Response').item.json.currentSession.reservation_time || '' }}",
             "reservation_name": "={{ $('Route & Build Response').item.json.sessionUpdate.reservation_name || $('Route & Build Response').item.json.currentSession.reservation_name || '' }}",
             "last_reservation_id": "={{ $('Route & Build Response').item.json.sessionUpdate.last_reservation_id || $('Route & Build Response').item.json.currentSession.last_reservation_id || '' }}",
+            "feedback_pending_order_id": "={{ $('Route & Build Response').item.json.currentSession.feedback_pending_order_id || '' }}",
+            "feedback_rating": "={{ $('Route & Build Response').item.json.sessionUpdate.feedback_rating || $('Route & Build Response').item.json.currentSession.feedback_rating || '' }}",
+            "feedback_comment": "={{ $('Route & Build Response').item.json.sessionUpdate.feedback_comment || $('Route & Build Response').item.json.currentSession.feedback_comment || '' }}",
+            "feedback_status": "={{ $('Route & Build Response').item.json.sessionUpdate.feedback_status || $('Route & Build Response').item.json.currentSession.feedback_status || '' }}",
             "last_updated": "={{ new Date().toISOString() }}"
           },
-          "matchingColumns": ["phone"],
-          "schema": []
-        },
-        "options": {}
+          "matchingColumns": ["phone"], "schema": []
+        }, "options": {}
       },
-      "id": "a8888888-8888-8888-8888-888888888888",
-      "name": "Update Session",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [1540, 300],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
-          "name": "Google Sheets"
-        }
-      }
+      "id": "a8888888-8888-8888-8888-888888888888", "name": "Update Session",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4, "position": [1980, 540],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Google Sheets" } }
     },
     {
       "parameters": {
         "conditions": {
           "options": { "caseSensitive": true, "typeValidation": "loose" },
-          "conditions": [{
-            "id": "cond-order",
-            "leftValue": "={{ $('Route & Build Response').item.json.sessionUpdate.order_status }}",
-            "rightValue": "confirmed",
-            "operator": { "type": "string", "operation": "equals" }
-          }],
+          "conditions": [{ "id": "c-ord", "leftValue": "={{ $('Route & Build Response').item.json.sessionUpdate.order_status }}", "rightValue": "confirmed", "operator": { "type": "string", "operation": "equals" } }],
           "combinator": "and"
-        },
-        "options": {}
+        }, "options": {}
       },
-      "id": "a9999999-9999-9999-9999-999999999999",
-      "name": "Order Confirmed?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1760, 240]
+      "id": "a9999999-9999-9999-9999-999999999999", "name": "Order Confirmed?",
+      "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [2200, 460]
     },
     {
       "parameters": {
         "conditions": {
           "options": { "caseSensitive": true, "typeValidation": "loose" },
-          "conditions": [{
-            "id": "cond-res",
-            "leftValue": "={{ $('Route & Build Response').item.json.sessionUpdate.reservation_status }}",
-            "rightValue": "confirmed",
-            "operator": { "type": "string", "operation": "equals" }
-          }],
+          "conditions": [{ "id": "c-res", "leftValue": "={{ $('Route & Build Response').item.json.sessionUpdate.reservation_status }}", "rightValue": "confirmed", "operator": { "type": "string", "operation": "equals" } }],
           "combinator": "and"
-        },
-        "options": {}
+        }, "options": {}
       },
-      "id": "aa000001-0001-0001-0001-000000000001",
-      "name": "Reservation Confirmed?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1760, 400]
+      "id": "aa000001-0001-0001-0001-000000000001", "name": "Reservation Confirmed?",
+      "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [2200, 600]
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Route & Build Response').item.json;\nconst s = d.currentSession;\nconst su = d.sessionUpdate;\nconst orderId = su.last_order_id || s.last_order_id;\nconst cname = su.order_customer_name || s.order_customer_name;\nconst items = s.pending_order;\nconst otype = su.order_type || s.order_type;\nconst now = new Date().toLocaleString('id-ID', {timeZone: 'Asia/Makassar'});\nreturn [{ json: {\n  order_id: orderId,\n  phone: d.phone,\n  customer_name: cname,\n  items,\n  order_type: otype,\n  status: 'confirmed',\n  order_time: new Date().toISOString(),\n  kitchen_msg: `*PESANAN BARU!*\\nNo: ${orderId}\\nNama: ${cname}\\nHP: ${d.phone}\\nPesanan: ${items}\\nTipe: ${otype}\\nWaktu: ${now}`\n}}];"
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [{ "id": "c-fb", "leftValue": "={{ $('Route & Build Response').item.json.sessionUpdate.feedback_status }}", "rightValue": "rated", "operator": { "type": "string", "operation": "equals" } }],
+          "combinator": "and"
+        }, "options": {}
       },
-      "id": "aa000002-0002-0002-0002-000000000002",
-      "name": "Prepare Order",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1980, 160]
+      "id": "f1000001-1000-1000-1000-f10000010001", "name": "Feedback Saved?",
+      "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [2200, 740]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Route & Build Response').item.json;\nconst s = d.currentSession;\nconst su = d.sessionUpdate;\nconst orderId = su.last_order_id || s.last_order_id;\nconst cname = su.order_customer_name || s.order_customer_name;\nconst items = s.pending_order;\nconst otype = su.order_type || s.order_type;\nconst total = su.order_total || s.order_total || '0';\nconst now = new Date().toLocaleString('id-ID', {timeZone: 'Asia/Makassar'});\nreturn [{ json: {\n  order_id: orderId, phone: d.phone, customer_name: cname, items, order_type: otype,\n  order_total: total, status: 'confirmed', order_time: new Date().toISOString(),\n  kitchen_msg: `*PESANAN BARU!*\\nNo: ${orderId}\\nNama: ${cname}\\nHP: ${d.phone}\\nPesanan: ${items}\\nTipe: ${otype}${total !== '0' ? '\\nTotal: Rp ' + Number(total).toLocaleString('id-ID') : ''}\\nWaktu: ${now}`\n}}];"
+      },
+      "id": "aa000002-0002-0002-0002-000000000002", "name": "Prepare Order",
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [2440, 400]
     },
     {
       "parameters": {
@@ -200,30 +261,13 @@
         "sheetName": { "__rl": true, "value": "Orders", "mode": "name" },
         "columns": {
           "mappingMode": "defineBelow",
-          "value": {
-            "order_id": "={{ $json.order_id }}",
-            "phone": "={{ $json.phone }}",
-            "customer_name": "={{ $json.customer_name }}",
-            "items": "={{ $json.items }}",
-            "order_type": "={{ $json.order_type }}",
-            "status": "={{ $json.status }}",
-            "order_time": "={{ $json.order_time }}"
-          },
+          "value": { "order_id": "={{ $json.order_id }}", "phone": "={{ $json.phone }}", "customer_name": "={{ $json.customer_name }}", "items": "={{ $json.items }}", "order_type": "={{ $json.order_type }}", "order_total": "={{ $json.order_total }}", "status": "={{ $json.status }}", "order_time": "={{ $json.order_time }}" },
           "schema": []
-        },
-        "options": {}
+        }, "options": {}
       },
-      "id": "aa000003-0003-0003-0003-000000000003",
-      "name": "Save Order",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [2200, 160],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
-          "name": "Google Sheets"
-        }
-      }
+      "id": "aa000003-0003-0003-0003-000000000003", "name": "Save Order",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4, "position": [2660, 400],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Google Sheets" } }
     },
     {
       "parameters": {
@@ -231,26 +275,19 @@
         "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
         "sendHeaders": true,
         "headerParameters": { "parameters": [{ "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }] },
-        "sendBody": true,
-        "contentType": "json",
-        "body": "={\"number\": \"{{ $env.WA_KITCHEN_NUMBER }}\", \"text\": \"{{ $('Prepare Order').item.json.kitchen_msg }}\"}",
+        "sendBody": true, "contentType": "json",
+        "body": "={{ JSON.stringify({ number: $env.WA_KITCHEN_NUMBER, text: $('Prepare Order').item.json.kitchen_msg }) }}",
         "options": {}
       },
-      "id": "aa000004-0004-0004-0004-000000000004",
-      "name": "Notify Kitchen",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2420, 160]
+      "id": "aa000004-0004-0004-0004-000000000004", "name": "Notify Kitchen",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2880, 400]
     },
     {
       "parameters": {
-        "jsCode": "const d = $('Route & Build Response').item.json;\nconst s = d.currentSession;\nconst su = d.sessionUpdate;\nconst resId = su.last_reservation_id || s.last_reservation_id;\nconst rname = su.reservation_name || s.reservation_name;\nconst guests = su.reservation_guests || s.reservation_guests;\nconst date = su.reservation_date || s.reservation_date;\nconst time = su.reservation_time || s.reservation_time;\nreturn [{ json: {\n  reservation_id: resId,\n  phone: d.phone,\n  customer_name: rname,\n  guests,\n  date,\n  time,\n  status: 'confirmed',\n  created_at: new Date().toISOString(),\n  owner_msg: `*RESERVASI BARU!*\\nNo: ${resId}\\nNama: ${rname}\\nHP: ${d.phone}\\nTamu: ${guests} orang\\nTanggal: ${date}\\nJam: ${time}`\n}}];"
+        "jsCode": "const d = $('Route & Build Response').item.json;\nconst s = d.currentSession;\nconst su = d.sessionUpdate;\nconst resId = su.last_reservation_id || s.last_reservation_id;\nconst rname = su.reservation_name || s.reservation_name;\nreturn [{ json: {\n  reservation_id: resId, phone: d.phone, customer_name: rname,\n  guests: su.reservation_guests || s.reservation_guests,\n  date: su.reservation_date || s.reservation_date,\n  time: su.reservation_time || s.reservation_time,\n  status: 'confirmed', created_at: new Date().toISOString(),\n  owner_msg: `*RESERVASI BARU!*\\nNo: ${resId}\\nNama: ${rname}\\nHP: ${d.phone}\\nTamu: ${su.reservation_guests || s.reservation_guests} orang\\nTanggal: ${su.reservation_date || s.reservation_date}\\nJam: ${su.reservation_time || s.reservation_time}`\n}}];"
       },
-      "id": "aa000005-0005-0005-0005-000000000005",
-      "name": "Prepare Reservation",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1980, 420]
+      "id": "aa000005-0005-0005-0005-000000000005", "name": "Prepare Reservation",
+      "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [2440, 560]
     },
     {
       "parameters": {
@@ -259,31 +296,13 @@
         "sheetName": { "__rl": true, "value": "Reservations", "mode": "name" },
         "columns": {
           "mappingMode": "defineBelow",
-          "value": {
-            "reservation_id": "={{ $json.reservation_id }}",
-            "phone": "={{ $json.phone }}",
-            "customer_name": "={{ $json.customer_name }}",
-            "guests": "={{ $json.guests }}",
-            "date": "={{ $json.date }}",
-            "time": "={{ $json.time }}",
-            "status": "={{ $json.status }}",
-            "created_at": "={{ $json.created_at }}"
-          },
+          "value": { "reservation_id": "={{ $json.reservation_id }}", "phone": "={{ $json.phone }}", "customer_name": "={{ $json.customer_name }}", "guests": "={{ $json.guests }}", "date": "={{ $json.date }}", "time": "={{ $json.time }}", "status": "={{ $json.status }}", "created_at": "={{ $json.created_at }}" },
           "schema": []
-        },
-        "options": {}
+        }, "options": {}
       },
-      "id": "aa000006-0006-0006-0006-000000000006",
-      "name": "Save Reservation",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [2200, 420],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
-          "name": "Google Sheets"
-        }
-      }
+      "id": "aa000006-0006-0006-0006-000000000006", "name": "Save Reservation",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4, "position": [2660, 560],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Google Sheets" } }
     },
     {
       "parameters": {
@@ -291,77 +310,64 @@
         "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
         "sendHeaders": true,
         "headerParameters": { "parameters": [{ "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }] },
-        "sendBody": true,
-        "contentType": "json",
-        "body": "={\"number\": \"{{ $env.WA_OWNER_NUMBER }}\", \"text\": \"{{ $('Prepare Reservation').item.json.owner_msg }}\"}",
+        "sendBody": true, "contentType": "json",
+        "body": "={{ JSON.stringify({ number: $env.WA_OWNER_NUMBER, text: $('Prepare Reservation').item.json.owner_msg }) }}",
         "options": {}
       },
-      "id": "aa000007-0007-0007-0007-000000000007",
-      "name": "Notify Owner Reservation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2420, 420]
+      "id": "aa000007-0007-0007-0007-000000000007", "name": "Notify Owner Reservation",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [2880, 560]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Feedback", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "feedback_id": "={{ 'FB-' + Date.now().toString().slice(-6) }}",
+            "phone": "={{ $('Route & Build Response').item.json.phone }}",
+            "customer_name": "={{ $('Route & Build Response').item.json.name }}",
+            "order_id": "={{ $('Route & Build Response').item.json.currentSession.feedback_pending_order_id || '' }}",
+            "rating": "={{ $('Route & Build Response').item.json.sessionUpdate.feedback_rating }}",
+            "comment": "={{ $('Route & Build Response').item.json.sessionUpdate.feedback_comment || $('Route & Build Response').item.json.currentSession.feedback_comment || '' }}",
+            "created_at": "={{ new Date().toISOString() }}"
+          },
+          "schema": []
+        }, "options": {}
+      },
+      "id": "f1000002-1000-1000-1000-f10000020002", "name": "Save Feedback",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4, "position": [2440, 720],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Google Sheets" } }
     }
   ],
   "connections": {
-    "Evolution Webhook": {
-      "main": [[
-        { "node": "Respond 200 OK", "type": "main", "index": 0 },
-        { "node": "Is From Bot?", "type": "main", "index": 0 }
-      ]]
-    },
-    "Is From Bot?": {
-      "main": [
-        [],
-        [{ "node": "Extract Message Data", "type": "main", "index": 0 }]
-      ]
-    },
-    "Extract Message Data": {
-      "main": [[{ "node": "Get Session", "type": "main", "index": 0 }]]
-    },
-    "Get Session": {
-      "main": [[{ "node": "Route & Build Response", "type": "main", "index": 0 }]]
-    },
-    "Route & Build Response": {
-      "main": [[{ "node": "Send WA Message", "type": "main", "index": 0 }]]
-    },
-    "Send WA Message": {
-      "main": [[{ "node": "Update Session", "type": "main", "index": 0 }]]
-    },
-    "Update Session": {
-      "main": [[
-        { "node": "Order Confirmed?", "type": "main", "index": 0 },
-        { "node": "Reservation Confirmed?", "type": "main", "index": 0 }
-      ]]
-    },
-    "Order Confirmed?": {
-      "main": [
-        [{ "node": "Prepare Order", "type": "main", "index": 0 }],
-        []
-      ]
-    },
-    "Prepare Order": {
-      "main": [[{ "node": "Save Order", "type": "main", "index": 0 }]]
-    },
-    "Save Order": {
-      "main": [[{ "node": "Notify Kitchen", "type": "main", "index": 0 }]]
-    },
-    "Reservation Confirmed?": {
-      "main": [
-        [{ "node": "Prepare Reservation", "type": "main", "index": 0 }],
-        []
-      ]
-    },
-    "Prepare Reservation": {
-      "main": [[{ "node": "Save Reservation", "type": "main", "index": 0 }]]
-    },
-    "Save Reservation": {
-      "main": [[{ "node": "Notify Owner Reservation", "type": "main", "index": 0 }]]
-    }
+    "Evolution Webhook": { "main": [[{ "node": "Respond 200 OK", "type": "main", "index": 0 }, { "node": "Is From Bot?", "type": "main", "index": 0 }]] },
+    "Is From Bot?": { "main": [[], [{ "node": "Extract Message Data", "type": "main", "index": 0 }]] },
+    "Extract Message Data": { "main": [[{ "node": "Is Staff?", "type": "main", "index": 0 }]] },
+    "Is Staff?": { "main": [[{ "node": "Detect Staff Command", "type": "main", "index": 0 }], [{ "node": "Get Session", "type": "main", "index": 0 }]] },
+    "Detect Staff Command": { "main": [[{ "node": "Needs Order Lookup?", "type": "main", "index": 0 }]] },
+    "Needs Order Lookup?": { "main": [[{ "node": "Read Order by ID", "type": "main", "index": 0 }], [{ "node": "Build Staff Response", "type": "main", "index": 0 }]] },
+    "Read Order by ID": { "main": [[{ "node": "Build Staff Response", "type": "main", "index": 0 }]] },
+    "Build Staff Response": { "main": [[{ "node": "Has Customer to Notify?", "type": "main", "index": 0 }]] },
+    "Has Customer to Notify?": { "main": [[{ "node": "Notify Customer (Staff)", "type": "main", "index": 0 }], [{ "node": "Reply to Staff", "type": "main", "index": 0 }]] },
+    "Notify Customer (Staff)": { "main": [[{ "node": "Update Order Status (Staff)", "type": "main", "index": 0 }]] },
+    "Update Order Status (Staff)": { "main": [[{ "node": "Reply to Staff", "type": "main", "index": 0 }]] },
+    "Get Session": { "main": [[{ "node": "Read Menu from Sheets", "type": "main", "index": 0 }]] },
+    "Read Menu from Sheets": { "main": [[{ "node": "Route & Build Response", "type": "main", "index": 0 }]] },
+    "Route & Build Response": { "main": [[{ "node": "Send WA Message", "type": "main", "index": 0 }]] },
+    "Send WA Message": { "main": [[{ "node": "Update Session", "type": "main", "index": 0 }]] },
+    "Update Session": { "main": [[{ "node": "Order Confirmed?", "type": "main", "index": 0 }, { "node": "Reservation Confirmed?", "type": "main", "index": 0 }, { "node": "Feedback Saved?", "type": "main", "index": 0 }]] },
+    "Order Confirmed?": { "main": [[{ "node": "Prepare Order", "type": "main", "index": 0 }], []] },
+    "Prepare Order": { "main": [[{ "node": "Save Order", "type": "main", "index": 0 }]] },
+    "Save Order": { "main": [[{ "node": "Notify Kitchen", "type": "main", "index": 0 }]] },
+    "Reservation Confirmed?": { "main": [[{ "node": "Prepare Reservation", "type": "main", "index": 0 }], []] },
+    "Prepare Reservation": { "main": [[{ "node": "Save Reservation", "type": "main", "index": 0 }]] },
+    "Save Reservation": { "main": [[{ "node": "Notify Owner Reservation", "type": "main", "index": 0 }]] },
+    "Feedback Saved?": { "main": [[{ "node": "Save Feedback", "type": "main", "index": 0 }], []] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },
-  "versionId": "1",
-  "id": "restoran-lombok-main-chatbot",
+  "id": "restoran-lombok-main-chatbot-v2",
   "tags": [{ "id": "1", "name": "Restoran Lombok" }]
 }
