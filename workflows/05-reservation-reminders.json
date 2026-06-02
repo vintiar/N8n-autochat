@@ -1,0 +1,115 @@
+{
+  "name": "05 - Restoran Sasak Lombok - Reservation Reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
+      },
+      "id": "e1111111-1111-1111-1111-111111111111",
+      "name": "Setiap 1 Jam",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Reservations", "mode": "name" },
+        "filtersUI": { "values": [{ "lookupColumn": "status", "lookupValue": "confirmed" }] },
+        "options": { "returnAllMatches": true }
+      },
+      "id": "e2222222-2222-2222-2222-222222222222",
+      "name": "Ambil Reservasi Confirmed",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [440, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cek reservasi yang perlu diingatkan: H-1 dan 2 jam sebelum\nconst now = new Date();\nconst nowMs = now.getTime();\nconst twoHours = 2 * 60 * 60 * 1000;\nconst oneDay = 24 * 60 * 60 * 1000;\n\nconst reminders = [];\n\n$input.all().forEach(item => {\n  const r = item.json;\n  const dateStr = String(r.date || '').trim();\n  const timeStr = String(r.time || '').trim();\n  if (!dateStr || !timeStr) return;\n\n  // Parse tanggal - support format: \"25 Juni 2025\", \"25/06/2025\", \"2025-06-25\"\n  const months = { januari:0,februari:1,maret:2,april:3,mei:4,juni:5,juli:6,agustus:7,september:8,oktober:9,november:10,desember:11 };\n  let reservationDate = null;\n  \n  if (dateStr.includes('/')) {\n    const [d, m, y] = dateStr.split('/');\n    reservationDate = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));\n  } else if (dateStr.includes('-')) {\n    reservationDate = new Date(dateStr);\n  } else {\n    // \"25 Juni 2025\"\n    const parts = dateStr.split(' ');\n    if (parts.length >= 3) {\n      const day = parseInt(parts[0]);\n      const month = months[parts[1].toLowerCase()];\n      const year = parseInt(parts[2]);\n      if (!isNaN(day) && month !== undefined && !isNaN(year)) {\n        reservationDate = new Date(year, month, day);\n      }\n    }\n  }\n  \n  if (!reservationDate) return;\n\n  // Parse jam - support \"19:00\", \"7 malam\", \"7pm\"\n  let hour = 12, minute = 0;\n  const timeMatch = timeStr.match(/(\\d{1,2})(?::(\\d{2}))?/);\n  if (timeMatch) {\n    hour = parseInt(timeMatch[1]);\n    minute = parseInt(timeMatch[2] || '0');\n    if (timeStr.toLowerCase().includes('malam') || timeStr.toLowerCase().includes('pm')) {\n      if (hour < 12) hour += 12;\n    }\n  }\n\n  reservationDate.setHours(hour, minute, 0, 0);\n  const reservationMs = reservationDate.getTime();\n  const diff = reservationMs - nowMs;\n\n  if (diff < 0) return; // sudah lewat\n\n  // Cek H-2 jam\n  const needH2 = diff <= twoHours * 1.5 && diff > 0 && String(r.reminder_h2_sent || '').toLowerCase() !== 'true';\n  // Cek H-1 (antara 22-26 jam dari sekarang)\n  const needH1 = diff >= oneDay - (2 * 60 * 60 * 1000) && diff <= oneDay + (2 * 60 * 60 * 1000) && String(r.reminder_h1_sent || '').toLowerCase() !== 'true';\n\n  if (needH2) {\n    reminders.push({\n      json: {\n        reservation_id: r.reservation_id,\n        phone: r.phone,\n        customer_name: r.customer_name,\n        guests: r.guests,\n        date: r.date,\n        time: r.time,\n        reminder_type: 'h2',\n        message: `Halo ${r.customer_name}! ⏰\\n\\nPengingat: reservasi meja kamu di *Restoran Sasak Lombok* *kurang dari 2 jam lagi!*\\n\\n📅 ${r.date}\\n⏰ ${r.time}\\n👥 ${r.guests} orang\\n📍 ${$env.RESTAURANT_ADDRESS}\\n\\nSampai jumpa! 🌶️`\n      }\n    });\n  } else if (needH1) {\n    reminders.push({\n      json: {\n        reservation_id: r.reservation_id,\n        phone: r.phone,\n        customer_name: r.customer_name,\n        guests: r.guests,\n        date: r.date,\n        time: r.time,\n        reminder_type: 'h1',\n        message: `Halo ${r.customer_name}! 🍽️\\n\\nPengingat: besok kamu punya reservasi di *Restoran Sasak Lombok*!\\n\\n📅 ${r.date}\\n⏰ ${r.time}\\n👥 ${r.guests} orang\\n📍 ${$env.RESTAURANT_ADDRESS}\\n\\nAda pertanyaan? Hubungi: ${$env.RESTAURANT_PHONE}`\n      }\n    });\n  }\n});\n\nreturn reminders;"
+      },
+      "id": "e3333333-3333-3333-3333-333333333333",
+      "name": "Cek Reminder Jatuh Tempo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [{ "id": "c1", "leftValue": "={{ $items().length }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }],
+          "combinator": "and"
+        }, "options": {}
+      },
+      "id": "e4444444-4444-4444-4444-444444444444",
+      "name": "Ada Reminder?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_URL }}/message/sendText/{{ $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "apikey", "value": "={{ $env.EVOLUTION_API_KEY }}" }] },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ number: $json.phone, text: $json.message }) }}",
+        "options": { "timeout": 8000 }
+      },
+      "id": "e5555555-5555-5555-5555-555555555555",
+      "name": "Kirim Reminder WA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Cek Reminder Jatuh Tempo').item.json;\nconst updateData = { reservation_id: r.reservation_id };\nif (r.reminder_type === 'h2') updateData.reminder_h2_sent = 'TRUE';\nelse updateData.reminder_h1_sent = 'TRUE';\nreturn [{ json: updateData }];"
+      },
+      "id": "e6666666-6666-6666-6666-666666666666",
+      "name": "Siapkan Update Flag",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 220]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "={{ $env.GOOGLE_SHEET_ID }}", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Reservations", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "reservation_id": "={{ $json.reservation_id }}",
+            "reminder_h1_sent": "={{ $json.reminder_h1_sent || '' }}",
+            "reminder_h2_sent": "={{ $json.reminder_h2_sent || '' }}"
+          },
+          "matchingColumns": ["reservation_id"], "schema": []
+        }, "options": {}
+      },
+      "id": "e7777777-7777-7777-7777-777777777777",
+      "name": "Update Reminder Flag",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1540, 220],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID", "name": "Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Setiap 1 Jam": { "main": [[{ "node": "Ambil Reservasi Confirmed", "type": "main", "index": 0 }]] },
+    "Ambil Reservasi Confirmed": { "main": [[{ "node": "Cek Reminder Jatuh Tempo", "type": "main", "index": 0 }]] },
+    "Cek Reminder Jatuh Tempo": { "main": [[{ "node": "Ada Reminder?", "type": "main", "index": 0 }]] },
+    "Ada Reminder?": { "main": [[{ "node": "Kirim Reminder WA", "type": "main", "index": 0 }], []] },
+    "Kirim Reminder WA": { "main": [[{ "node": "Siapkan Update Flag", "type": "main", "index": 0 }]] },
+    "Siapkan Update Flag": { "main": [[{ "node": "Update Reminder Flag", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "id": "restoran-lombok-reminders",
+  "tags": [{ "id": "1", "name": "Restoran Lombok" }]
+}
